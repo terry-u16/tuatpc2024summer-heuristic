@@ -106,6 +106,8 @@ fn solve(input: &Input) -> Vec<Op> {
         }
     }
 
+    eprintln!("Score = {}", dp[input.n]);
+
     let mut ops = vec![];
     let mut current = input.n;
 

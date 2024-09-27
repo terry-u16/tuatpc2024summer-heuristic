@@ -1,0 +1,46 @@
+{
+  "ProblemOption": {
+    "ProblemName": "tuatpc2024summer-heuristic",
+    "TimeLimit": "00:00:02"
+  },
+  "RunnerOption": {
+    "StartSeed": 0,
+    "EndSeed": 256,
+    "ReferenceScore": 1000000,
+    "LocalParallelCount": 16,
+    "CloudParallelCount": 300,
+    "SummaryFilePath": ".\\data\\score_history.txt",
+    "ResultDirectoryPath": ".\\data\\results"
+  },
+  "ExecutionOption": {
+    "ScoreRegex": "^Score = (?<score>\\d+)$",
+    "SeedFormat": "0000",
+    "Timeout": "00:00:30",
+    "LocalExecutionSteps": [
+      {
+        "ExecutionCommand": "tuatpc2024summer-heuristic.exe",
+        "StdInPath": "data/in/{SEED}.txt",
+        "StdOutPath": "data/out/{SEED}.txt",
+        "StdErrorPath": "data/err/{SEED}.txt"
+      }
+    ],
+    "CloudExecutionSteps": [
+      {
+        "ExecutionCommand": "tuatpc2024summer-heuristic",
+        "StdInPath": "data/in/{SEED}.txt",
+        "StdOutPath": "data/out/{SEED}.txt",
+        "StdErrorPath": "data/err/{SEED}.txt"
+      }
+    ],
+    "Files": ["main", "vis", "in/{SEED}.txt"]
+  },
+  "CompileOption": {
+    "ExeName": "main",
+    "Files": [
+      {
+        "Source": "expanded.rs",
+        "Destination": "src/bin/main.rs"
+      }
+    ]
+  }
+}
