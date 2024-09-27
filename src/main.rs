@@ -91,13 +91,6 @@ fn solve(input: &Input) -> Vec<Op> {
     let since = std::time::Instant::now();
     let millefeuille_dict = MillefeuilleDict::gen_all(input);
     eprintln!("Elapsed = {:?}", since.elapsed());
-    eprintln!(
-        "{}",
-        millefeuille_dict
-            .get(&[10, 14, 14, 14])
-            .map(|f| f.base_score)
-            .unwrap()
-    );
 
     for from in 0..input.n {
         let mut counts = [0; Input::COLOR_COUNT];
@@ -516,7 +509,7 @@ impl MillefeuilleDict {
         let mut index = key.clone();
 
         for (i, j) in index.iter_mut().zip(self.len.iter()) {
-            i.change_min(*j);
+            i.change_min(*j - 1);
         }
 
         let best_key = self.best_keys[MillefeuilleDict::to_index(&index, &self.len)];
