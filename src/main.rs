@@ -94,7 +94,7 @@ fn solve(input: &Input) -> Vec<Op> {
         for to in from + 1..=input.n {
             counts[input.a[to - 1]] += 1;
 
-            if counts.iter().sum::<u32>() >= (input.height * input.width) as u32 {
+            if counts.iter().sum::<u32>() > (input.height * input.width) as u32 {
                 break;
             }
 
