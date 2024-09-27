@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display, iter::Map, ops::Index, u32};
 
 use ac_library::Dsu;
-use chain_templates::{CHAIN_6X6, CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
+use chain_templates::{CHAIN_6X6, CHAIN_7X6, CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
 use grid::{Coord, Map2d, ADJACENTS};
 use itertools::Itertools;
 use marker::Usize1;
@@ -394,6 +394,7 @@ impl MillefeuilleDict {
     fn gen_all(input: &Input) -> Self {
         let templates = [
             (CHAIN_6X6, 6, 6),
+            (CHAIN_7X6, 7, 6),
             (CHAIN_7X7, 7, 7),
             (CHAIN_8X7, 8, 7),
             (CHAIN_8X8, 8, 8),
@@ -604,7 +605,8 @@ impl MillefeuilleTemplate {
                 last_erase,
             ));
 
-            board.progress();
+            board.erase();
+            board.fall();
         }
 
         result
@@ -753,9 +755,11 @@ impl MillefeuilleTemplate {
                 }
             }
 
-            if board.progress() == 0 {
+            if board.erase() == 0 {
                 break;
             }
+
+            board.fall();
         }
 
         for prohibits in prohibited.iter_mut() {
@@ -773,7 +777,8 @@ impl MillefeuilleTemplate {
 
         loop {
             chain += 1;
-            let erased = board.progress();
+            board.fall();
+            let erased = board.erase();
             base_score += erased * erased * input.chain_coefs[chain as usize];
 
             if erased == 0 {
@@ -801,11 +806,6 @@ impl MillefeuilleBoard {
             height,
             width,
         }
-    }
-
-    fn progress(&mut self) -> u32 {
-        self.fall();
-        self.erase()
     }
 
     fn fall(&mut self) {
