@@ -892,8 +892,8 @@ mod chain_templates {
     FGGHGF
     FEEHIH
     EABCID
-    ABCDI
-    ABCD";
+    ABCDJI
+    ABCDJJ";
 
     const CHAIN_6X6: &str = "
     HIIJIH
