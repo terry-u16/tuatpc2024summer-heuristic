@@ -1,6 +1,8 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, iter::Map, u32};
 
-use grid::{Coord, Map2d};
+use ac_library::Dsu;
+use chain_templates::{CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
+use grid::{Coord, Map2d, ADJACENTS};
 use itertools::Itertools;
 use marker::Usize1;
 #[allow(unused_imports)]
@@ -86,6 +88,20 @@ fn solve(input: &Input) -> Vec<Op> {
     let mut history = (0..=input.n)
         .map::<(Box<dyn Chain>, usize), _>(|_| (Box::new(TrushChain::new()), 0))
         .collect_vec();
+    let templates = MillefeuilleTemplate::generate(CHAIN_8X8, input);
+    let mut candidates = HashMap::new();
+
+    for template in templates {
+        template.gen_millefeuille_candidates(&mut candidates);
+    }
+
+    eprintln!("{}", candidates.len());
+
+    for c in candidates.keys().take(10) {
+        eprintln!("{:?}", c);
+    }
+
+    panic!();
 
     for from in 0..input.n {
         let mut counts = [0; Input::COLOR_COUNT];
@@ -97,7 +113,7 @@ fn solve(input: &Input) -> Vec<Op> {
                 break;
             }
 
-            let snake = SnakeChain::new(input, counts);
+            let snake = HellFire::new(input, counts);
             let score = dp[from] + snake.execute(&input.a[from..to]).score;
 
             if dp[to].change_max(score) {
@@ -147,54 +163,6 @@ impl Display for Op {
         write!(f, " {}", if self.fire { 1 } else { 0 })
     }
 }
-
-// いらない気がしてきた
-/*
-struct Board {
-    board: Map2d<Option<usize>>,
-    height: usize,
-    width: usize,
-    chain: u32,
-}
-
-impl Board {
-    fn new(board: Map2d<Option<usize>>, height: usize, width: usize, chain: u32) -> Self {
-        Self {
-            board,
-            height,
-            width,
-            chain,
-        }
-    }
-
-    fn progress(&mut self) -> u32 {
-        self.chain += 1;
-        self.fall();
-        self.erase()
-    }
-
-    fn fall(&mut self) {
-        for row in 0..self.height {
-            let row = &mut self.board[row];
-            let mut dst = 0;
-
-            for src in 0..self.width {
-                if let Some(v) = row[src] {
-                    row[src] = None;
-                    row[dst] = Some(v);
-                    dst += 1;
-                }
-            }
-        }
-    }
-
-    fn erase(&mut self) -> u32 {
-
-
-        todo!();
-    }
-}
- */
 
 struct EraseInfo {
     chain: u32,
@@ -324,12 +292,12 @@ impl Chain for TrushChain {
 }
 
 #[derive(Debug, Clone)]
-struct SnakeChain {
+struct HellFire {
     positions: [Vec<Coord>; Input::COLOR_COUNT],
     base_score: u32,
 }
 
-impl SnakeChain {
+impl HellFire {
     fn new(input: &Input, counts: [u32; Input::COLOR_COUNT]) -> Self {
         assert!(counts.iter().sum::<u32>() <= input.height as u32 * input.width as u32);
         let mut positions = [vec![], vec![], vec![], vec![]];
@@ -375,7 +343,7 @@ impl SnakeChain {
     }
 }
 
-impl Chain for SnakeChain {
+impl Chain for HellFire {
     fn positions(&self) -> &[Vec<Coord>; Input::COLOR_COUNT] {
         &self.positions
     }
@@ -385,9 +353,415 @@ impl Chain for SnakeChain {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Millefeuille {
+    positions: [Vec<Coord>; Input::COLOR_COUNT],
+    base_score: u32,
+}
+
+impl Millefeuille {
+    fn new(positions: [Vec<Coord>; Input::COLOR_COUNT], base_score: u32) -> Self {
+        Self {
+            positions,
+            base_score,
+        }
+    }
+}
+
+struct MillefeuilleTemplate {
+    template: Map2d<Option<usize>>,
+    prohibited: Vec<Vec<usize>>,
+    counts: Vec<u32>,
+    placeholder_len: usize,
+    base_score: u32,
+    color_bonus_target: Vec<usize>,
+    last_erase: u32,
+}
+
+impl MillefeuilleTemplate {
+    fn new(
+        template: Map2d<Option<usize>>,
+        prohibited: Vec<Vec<usize>>,
+        counts: Vec<u32>,
+        placeholder_len: usize,
+        base_score: u32,
+        color_bonus_target: Vec<usize>,
+        last_erase: u32,
+    ) -> Self {
+        Self {
+            template,
+            prohibited,
+            counts,
+            placeholder_len,
+            base_score,
+            color_bonus_target,
+            last_erase,
+        }
+    }
+
+    fn generate(template: &str, input: &Input) -> Vec<Self> {
+        let template_str = template.split_whitespace().collect_vec();
+        let height = template_str.len();
+        let width = template_str.iter().map(|s| s.len()).max().unwrap();
+        let mut board = MillefeuilleBoard::new(Map2d::with_default(width, height), height, width);
+
+        for row in 0..height {
+            for (col, c) in template_str[row].chars().enumerate() {
+                let v = c as usize - 'A' as usize;
+                board.board[Coord::new(row, col)] = Some(v);
+            }
+        }
+
+        let mut result = vec![];
+
+        loop {
+            let max_val = board.board.iter().flatten().max();
+
+            let Some(max_val) = max_val else {
+                break;
+            };
+
+            let placeholder_len = max_val + 1;
+            let prohibited = Self::gen_prohibited(board.clone(), placeholder_len);
+            let (base_score, last_erase) = Self::calc_base_score(board.clone(), input);
+
+            let mut counts = vec![0; placeholder_len];
+
+            for v in board.board.iter().flatten() {
+                counts[*v] += 1;
+            }
+
+            let color_bonus_targets = board.board[height - 1]
+                .iter()
+                .flatten()
+                .copied()
+                .sorted()
+                .dedup()
+                .collect_vec();
+
+            result.push(Self::new(
+                board.board.clone(),
+                prohibited,
+                counts.clone(),
+                placeholder_len,
+                base_score,
+                color_bonus_targets,
+                last_erase,
+            ));
+
+            board.progress();
+        }
+
+        result
+    }
+
+    fn gen_millefeuille_candidates(
+        &self,
+        candidates: &mut HashMap<[u32; Input::COLOR_COUNT], Millefeuille>,
+    ) {
+        let mut color_counts = [0; Input::COLOR_COUNT];
+        let mut assign = vec![None; self.placeholder_len];
+        let mut avaliable_flags = vec![(1 << Input::COLOR_COUNT) - 1; self.placeholder_len];
+        let mut iter = 0;
+        self.collect_dfs(
+            &mut color_counts,
+            &mut assign,
+            &mut avaliable_flags,
+            0,
+            candidates,
+            &mut iter,
+        );
+
+        eprintln!("Iter = {}", iter);
+    }
+
+    fn collect_dfs(
+        &self,
+        color_counts: &mut [u32; Input::COLOR_COUNT],
+        assign: &mut Vec<Option<usize>>,
+        avaliable_flags: &mut Vec<u8>,
+        depth: usize,
+        candidates: &mut HashMap<[u32; Input::COLOR_COUNT], Millefeuille>,
+        iter: &mut u64,
+    ) {
+        *iter += 1;
+
+        if *iter % 1000000 == 0 {
+            eprintln!("{}", *iter);
+        }
+
+        if depth == self.placeholder_len {
+            let old_score = candidates
+                .get(color_counts)
+                .map(|f| f.base_score)
+                .unwrap_or(0);
+            let mut new_score = self.base_score;
+            let mut color_flag = 0u32;
+
+            for &target in self.color_bonus_target.iter() {
+                color_flag |= 1 << assign[target].unwrap();
+            }
+
+            new_score += self.last_erase * self.last_erase * color_flag.count_ones();
+
+            if new_score > old_score {
+                let mut positions = [vec![], vec![], vec![], vec![]];
+
+                for row in 0..self.template.height() {
+                    for col in 0..self.template.width() {
+                        let c = Coord::new(row, col);
+
+                        if let Some(v) = self.template[c] {
+                            positions[assign[v].unwrap()].push(c);
+                        }
+                    }
+                }
+
+                candidates.insert(*color_counts, Millefeuille::new(positions, new_score));
+
+                if candidates.len() % 10000 == 0 {
+                    eprintln!("{}", candidates.len());
+                }
+            }
+
+            return;
+        }
+
+        // 選択肢が少ないものを優先して探索
+        let mut min_avail = u32::MAX;
+        let mut target_i = !0;
+
+        for (i, (&assign, &avail)) in assign.iter().zip(avaliable_flags.iter()).enumerate() {
+            if assign.is_none() && min_avail.change_min(avail.count_ones()) {
+                target_i = i;
+            }
+        }
+
+        if min_avail == 0 {
+            return;
+        }
+
+        for color in 0..Input::COLOR_COUNT {
+            if (avaliable_flags[target_i] >> color) & 1 == 0 {
+                continue;
+            }
+
+            color_counts[color] += self.counts[target_i];
+            assign[target_i] = Some(color);
+            let mut new_available_flags = avaliable_flags.clone();
+
+            for adj in &self.prohibited[target_i] {
+                new_available_flags[*adj] &= !(1 << color);
+            }
+
+            self.collect_dfs(
+                color_counts,
+                assign,
+                &mut new_available_flags,
+                depth + 1,
+                candidates,
+                iter,
+            );
+
+            assign[target_i] = None;
+            color_counts[color] -= self.counts[target_i];
+        }
+    }
+
+    fn gen_prohibited(mut board: MillefeuilleBoard, placeholder_len: usize) -> Vec<Vec<usize>> {
+        let mut prohibited = vec![vec![]; placeholder_len];
+
+        loop {
+            for row in 0..board.height {
+                for col in 0..board.width {
+                    let c = Coord::new(row, col);
+
+                    let Some(v) = board.board[c] else {
+                        continue;
+                    };
+
+                    for adj in ADJACENTS {
+                        let next = c + adj;
+
+                        if !next.in_map(board.width, board.height) {
+                            continue;
+                        }
+
+                        let Some(next_v) = board.board[next] else {
+                            continue;
+                        };
+
+                        if v != next_v {
+                            prohibited[v].push(next_v);
+                        }
+                    }
+                }
+            }
+
+            if board.progress() == 0 {
+                break;
+            }
+        }
+
+        for prohibits in prohibited.iter_mut() {
+            prohibits.sort();
+            prohibits.dedup();
+        }
+
+        prohibited
+    }
+
+    fn calc_base_score(mut board: MillefeuilleBoard, input: &Input) -> (u32, u32) {
+        let mut chain = 0;
+        let mut base_score = 0;
+        let mut last_erase = 0;
+
+        loop {
+            chain += 1;
+            let erased = board.progress();
+            base_score += erased * erased * input.chain_coefs[chain as usize];
+
+            if erased == 0 {
+                break;
+            }
+
+            last_erase = erased;
+        }
+
+        (base_score, last_erase)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct MillefeuilleBoard {
+    board: Map2d<Option<usize>>,
+    height: usize,
+    width: usize,
+}
+
+impl MillefeuilleBoard {
+    fn new(board: Map2d<Option<usize>>, height: usize, width: usize) -> Self {
+        Self {
+            board,
+            height,
+            width,
+        }
+    }
+
+    fn progress(&mut self) -> u32 {
+        self.fall();
+        self.erase()
+    }
+
+    fn fall(&mut self) {
+        for row in 0..self.height {
+            let row = &mut self.board[row];
+            let mut dst = 0;
+
+            for src in 0..self.width {
+                if let Some(v) = row[src] {
+                    row[src] = None;
+                    row[dst] = Some(v);
+                    dst += 1;
+                }
+            }
+        }
+    }
+
+    fn erase(&mut self) -> u32 {
+        let mut dsu = Dsu::new(self.height * self.width);
+
+        for row in 0..self.height {
+            for col in 0..self.width {
+                let c = Coord::new(row, col);
+
+                for adj in ADJACENTS {
+                    let next = c + adj;
+
+                    if !next.in_map(self.width, self.height) {
+                        continue;
+                    }
+
+                    if self.board[c] == self.board[next] {
+                        dsu.merge(c.to_index(self.width), next.to_index(self.width));
+                    }
+                }
+            }
+        }
+
+        let mut cnt = 0;
+
+        for row in 0..self.height {
+            for col in 0..self.width {
+                let c = Coord::new(row, col);
+
+                if let Some(_) = self.board[c] {
+                    let size = dsu.size(c.to_index(self.width));
+
+                    if size >= Input::CONNNECT_COUNT as usize {
+                        self.board[c] = None;
+                        cnt += 1;
+                    }
+                }
+            }
+        }
+
+        cnt
+    }
+}
+
+mod chain_templates {
+    pub const CHAIN_6X6: &str = "
+    HIIJIH
+    HGGJKJ
+    GFFKK
+    FABCDE
+    ABCDE
+    ABCDE";
+
+    pub const CHAIN_7X6: &str = "
+    IJJKJI
+    IHHKLK
+    HGGLL
+    GABCDEF
+    ABCDEF
+    ABCDEF";
+
+    pub const CHAIN_7X7: &str = "
+    IJJKJI
+    IHHLKK
+    HGLMMML
+    GABCDEF
+    GABCDEF
+    ABCDEF
+    ABCDEF";
+
+    pub const CHAIN_8X7: &str = "
+    JKKLKJ
+    JIIMLL
+    IHMNNNM
+    HABCDEFG
+    HABCDEFG
+    ABCDEFG
+    ABCDEFG";
+
+    pub const CHAIN_8X8: &str = "
+    KKLMLKJ
+    JILNMM
+    JINON
+    IHOO
+    HABCDEFG
+    HABCDEFG
+    ABCDEFG
+    ABCDEFG";
+}
+
 #[allow(dead_code)]
 mod grid {
-    use std::ops::{Add, AddAssign, Index, IndexMut};
+    use std::{
+        ops::{Add, AddAssign, Index, IndexMut},
+        slice::Iter,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Coord {
@@ -411,12 +785,12 @@ mod grid {
             self.col as usize
         }
 
-        pub fn in_map(&self, size: usize) -> bool {
-            self.row < size as u8 && self.col < size as u8
+        pub fn in_map(&self, width: usize, height: usize) -> bool {
+            self.row < height as u8 && self.col < width as u8
         }
 
-        pub const fn to_index(&self, size: usize) -> usize {
-            self.row as usize * size + self.col as usize
+        pub const fn to_index(&self, width: usize) -> usize {
+            self.row as usize * width + self.col as usize
         }
 
         pub const fn dist(&self, other: &Self) -> usize {
@@ -487,21 +861,34 @@ mod grid {
 
     #[derive(Debug, Clone)]
     pub struct Map2d<T> {
-        size: usize,
+        width: usize,
+        height: usize,
         map: Vec<T>,
     }
 
     impl<T> Map2d<T> {
-        pub fn new(map: Vec<T>, size: usize) -> Self {
-            debug_assert!(size * size == map.len());
-            Self { size, map }
+        pub fn new(map: Vec<T>, width: usize, height: usize) -> Self {
+            debug_assert!(width * height == map.len());
+            Self { width, height, map }
+        }
+
+        pub fn width(&self) -> usize {
+            self.width
+        }
+
+        pub fn height(&self) -> usize {
+            self.height
+        }
+
+        pub fn iter(&self) -> Iter<T> {
+            self.map.iter()
         }
     }
 
     impl<T: Default + Clone> Map2d<T> {
-        pub fn with_default(size: usize) -> Self {
-            let map = vec![T::default(); size * size];
-            Self { size, map }
+        pub fn with_default(width: usize, height: usize) -> Self {
+            let map = vec![T::default(); width * height];
+            Self::new(map, width, height)
         }
     }
 
@@ -510,14 +897,14 @@ mod grid {
 
         #[inline]
         fn index(&self, coordinate: Coord) -> &Self::Output {
-            &self.map[coordinate.to_index(self.size)]
+            &self.map[coordinate.to_index(self.width)]
         }
     }
 
     impl<T> IndexMut<Coord> for Map2d<T> {
         #[inline]
         fn index_mut(&mut self, coordinate: Coord) -> &mut Self::Output {
-            &mut self.map[coordinate.to_index(self.size)]
+            &mut self.map[coordinate.to_index(self.width)]
         }
     }
 
@@ -526,14 +913,14 @@ mod grid {
 
         #[inline]
         fn index(&self, coordinate: &Coord) -> &Self::Output {
-            &self.map[coordinate.to_index(self.size)]
+            &self.map[coordinate.to_index(self.width)]
         }
     }
 
     impl<T> IndexMut<&Coord> for Map2d<T> {
         #[inline]
         fn index_mut(&mut self, coordinate: &Coord) -> &mut Self::Output {
-            &mut self.map[coordinate.to_index(self.size)]
+            &mut self.map[coordinate.to_index(self.width)]
         }
     }
 
@@ -542,8 +929,8 @@ mod grid {
 
         #[inline]
         fn index(&self, row: usize) -> &Self::Output {
-            let begin = row * self.size;
-            let end = begin + self.size;
+            let begin = row * self.width;
+            let end = begin + self.width;
             &self.map[begin..end]
         }
     }
@@ -551,8 +938,8 @@ mod grid {
     impl<T> IndexMut<usize> for Map2d<T> {
         #[inline]
         fn index_mut(&mut self, row: usize) -> &mut Self::Output {
-            let begin = row * self.size;
-            let end = begin + self.size;
+            let begin = row * self.width;
+            let end = begin + self.width;
             &mut self.map[begin..end]
         }
     }
@@ -625,63 +1012,6 @@ mod grid {
             let begin = row * N;
             let end = begin + N;
             &mut self.map[begin..end]
-        }
-    }
-
-    #[cfg(test)]
-    mod test {
-        use super::{ConstMap2d, Coord, CoordDiff, Map2d};
-
-        #[test]
-        fn coord_add() {
-            let c = Coord::new(2, 4);
-            let d = CoordDiff::new(-3, 5);
-            let actual = c + d;
-
-            let expected = Coord::new(!0, 9);
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn coord_add_assign() {
-            let mut c = Coord::new(2, 4);
-            let d = CoordDiff::new(-3, 5);
-            c += d;
-
-            let expected = Coord::new(!0, 9);
-            assert_eq!(expected, c);
-        }
-
-        #[test]
-        fn map_new() {
-            let map = Map2d::new(vec![0, 1, 2, 3], 2);
-            let actual = map[Coord::new(1, 0)];
-            let expected = 2;
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn map_default() {
-            let map = Map2d::with_default(2);
-            let actual = map[Coord::new(1, 0)];
-            let expected = 0;
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn const_map_new() {
-            let map = ConstMap2d::<_, 2>::new(vec![0, 1, 2, 3]);
-            let actual = map[Coord::new(1, 0)];
-            let expected = 2;
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn const_map_default() {
-            let map = ConstMap2d::<_, 2>::with_default();
-            let actual = map[Coord::new(1, 0)];
-            let expected = 0;
-            assert_eq!(expected, actual);
         }
     }
 }
