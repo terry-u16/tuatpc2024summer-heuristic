@@ -983,7 +983,7 @@ mod chain_templates {
     KKLMLKJ
     JILNMM
     JINON
-    IHOO
+    IHOPPPO
     HABCDEFG
     HABCDEFG
     ABCDEFG
