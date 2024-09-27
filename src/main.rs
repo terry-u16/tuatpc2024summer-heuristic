@@ -1,14 +1,10 @@
-use std::{collections::HashMap, fmt::Display, iter::Map, ops::Index, u32};
-
 use ac_library::Dsu;
 use chain_templates::RENSA_TEMPLATES;
 use grid::{Coord, Map2d, ADJACENTS};
 use itertools::Itertools;
 use marker::Usize1;
-#[allow(unused_imports)]
 use proconio::*;
-#[allow(unused_imports)]
-use rand::prelude::*;
+use std::{collections::HashMap, fmt::Display, u32};
 
 pub trait ChangeMinMax {
     fn change_min(&mut self, v: Self) -> bool;
@@ -193,7 +189,7 @@ trait Chain {
         let mut completed = self.positions().iter().filter(|&p| p.is_empty()).count();
         let mut counts = [0; Input::COLOR_COUNT];
 
-        for (i, &c) in colors.iter().enumerate() {
+        for &c in colors.iter() {
             let needed = self.positions()[c].len();
 
             if counts[c] < needed {
@@ -204,7 +200,7 @@ trait Chain {
 
                     if completed == Input::COLOR_COUNT {
                         let score = self.base_score() + disposed * 100;
-                        return ExecuteResult::new(score, i + 1, true);
+                        return ExecuteResult::new(score);
                     }
                 }
             } else {
@@ -212,7 +208,7 @@ trait Chain {
             }
         }
 
-        ExecuteResult::new(disposed * 100, colors.len(), false)
+        ExecuteResult::new(disposed * 100)
     }
 
     fn restore(&self, colors: &[usize]) -> Vec<Op> {
@@ -245,17 +241,11 @@ trait Chain {
 #[derive(Debug, Clone, Copy)]
 struct ExecuteResult {
     score: u32,
-    len: usize,
-    succeeded: bool,
 }
 
 impl ExecuteResult {
-    fn new(score: u32, len: usize, succeeded: bool) -> Self {
-        Self {
-            score,
-            len,
-            succeeded,
-        }
+    fn new(score: u32) -> Self {
+        Self { score }
     }
 }
 
@@ -282,7 +272,7 @@ impl Chain for TrushChain {
     }
 
     fn execute(&self, colors: &[usize]) -> ExecuteResult {
-        ExecuteResult::new(colors.len() as u32 * 100, colors.len(), false)
+        ExecuteResult::new(colors.len() as u32 * 100)
     }
 
     fn restore(&self, _colors: &[usize]) -> Vec<Op> {
