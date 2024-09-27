@@ -1,7 +1,7 @@
-use std::{collections::HashMap, fmt::Display, iter::Map, u32};
+use std::{collections::HashMap, fmt::Display, iter::Map, ops::Index, u32};
 
 use ac_library::Dsu;
-use chain_templates::{CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
+use chain_templates::{CHAIN_6X6, CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
 use grid::{Coord, Map2d, ADJACENTS};
 use itertools::Itertools;
 use marker::Usize1;
@@ -88,20 +88,16 @@ fn solve(input: &Input) -> Vec<Op> {
     let mut history = (0..=input.n)
         .map::<(Box<dyn Chain>, usize), _>(|_| (Box::new(TrushChain::new()), 0))
         .collect_vec();
-    let templates = MillefeuilleTemplate::generate(CHAIN_8X8, input);
-    let mut candidates = HashMap::new();
-
-    for template in templates {
-        template.gen_millefeuille_candidates(&mut candidates);
-    }
-
-    eprintln!("{}", candidates.len());
-
-    for c in candidates.keys().take(10) {
-        eprintln!("{:?}", c);
-    }
-
-    panic!();
+    let since = std::time::Instant::now();
+    let millefeuille_dict = MillefeuilleDict::gen_all(input);
+    eprintln!("Elapsed = {:?}", since.elapsed());
+    eprintln!(
+        "{}",
+        millefeuille_dict
+            .get(&[10, 14, 14, 14])
+            .map(|f| f.base_score)
+            .unwrap()
+    );
 
     for from in 0..input.n {
         let mut counts = [0; Input::COLOR_COUNT];
@@ -113,11 +109,21 @@ fn solve(input: &Input) -> Vec<Op> {
                 break;
             }
 
-            let snake = HellFire::new(input, counts);
-            let score = dp[from] + snake.execute(&input.a[from..to]).score;
+            // ヘルファイア
+            let hellfire = HellFire::new(input, counts);
+            let score = dp[from] + hellfire.execute(&input.a[from..to]).score;
 
             if dp[to].change_max(score) {
-                history[to] = (Box::new(snake), from);
+                history[to] = (Box::new(hellfire), from);
+            }
+
+            // ミルフィーユ
+            if let Some(millefeuille) = millefeuille_dict.get(&counts) {
+                let score = dp[from] + millefeuille.execute(&input.a[from..to]).score;
+
+                if dp[to].change_max(score) {
+                    history[to] = (Box::new(millefeuille.clone()), from);
+                }
             }
         }
     }
@@ -365,6 +371,155 @@ impl Millefeuille {
             positions,
             base_score,
         }
+    }
+}
+
+impl Chain for Millefeuille {
+    fn positions(&self) -> &[Vec<Coord>; Input::COLOR_COUNT] {
+        &self.positions
+    }
+
+    fn base_score(&self) -> u32 {
+        self.base_score
+    }
+}
+
+struct MillefeuilleDict {
+    best_keys: Vec<[u32; Input::COLOR_COUNT]>,
+    hashmap: HashMap<[u32; Input::COLOR_COUNT], Millefeuille>,
+    len: [u32; Input::COLOR_COUNT],
+}
+
+impl MillefeuilleDict {
+    fn gen_all(input: &Input) -> Self {
+        let templates = [
+            (CHAIN_6X6, 6, 6),
+            (CHAIN_7X7, 7, 7),
+            (CHAIN_8X7, 8, 7),
+            (CHAIN_8X8, 8, 8),
+        ];
+        let mut candidates = HashMap::new();
+
+        for &(s, height, width) in templates.iter() {
+            if input.height >= height && input.width >= width {
+                let templates = MillefeuilleTemplate::generate(s, input);
+
+                for template in templates {
+                    template.gen_millefeuille_candidates(&mut candidates);
+                }
+            }
+        }
+
+        MillefeuilleDict::new(candidates)
+    }
+
+    fn new(hashmap: HashMap<[u32; Input::COLOR_COUNT], Millefeuille>) -> Self {
+        let mut len = [0; Input::COLOR_COUNT];
+
+        for key in hashmap.keys() {
+            for i in 0..Input::COLOR_COUNT {
+                len[i].change_max(key[i]);
+            }
+        }
+
+        for len in len.iter_mut() {
+            *len += 1;
+        }
+
+        let mut best_keys = vec![[!0, !0, !0, !0]; (len[0] * len[1] * len[2] * len[3]) as usize];
+        let mut best_score = vec![0; (len[0] * len[1] * len[2] * len[3]) as usize];
+
+        for (key, value) in hashmap.iter() {
+            let index = Self::to_index(key, &len);
+            best_keys[index] = *key;
+            best_score[index] = value.base_score;
+        }
+
+        // 累積maxを取る
+        for i in 0..len[0] - 1 {
+            for j in 0..len[1] {
+                for k in 0..len[2] {
+                    for l in 0..len[3] {
+                        let index0 = Self::to_index(&[i, j, k, l], &len);
+                        let index1 = Self::to_index(&[i + 1, j, k, l], &len);
+                        let new_score = best_score[index0] + 100;
+
+                        if best_score[index1].change_max(new_score) {
+                            best_keys[index1] = best_keys[index0];
+                        }
+                    }
+                }
+            }
+        }
+
+        for j in 0..len[1] - 1 {
+            for i in 0..len[0] {
+                for k in 0..len[2] {
+                    for l in 0..len[3] {
+                        let index0 = Self::to_index(&[i, j, k, l], &len);
+                        let index1 = Self::to_index(&[i, j + 1, k, l], &len);
+                        let new_score = best_score[index0] + 100;
+
+                        if best_score[index1].change_max(new_score) {
+                            best_keys[index1] = best_keys[index0];
+                        }
+                    }
+                }
+            }
+        }
+
+        for k in 0..len[2] - 1 {
+            for i in 0..len[0] {
+                for j in 0..len[1] {
+                    for l in 0..len[3] {
+                        let index0 = Self::to_index(&[i, j, k, l], &len);
+                        let index1 = Self::to_index(&[i, j, k + 1, l], &len);
+                        let new_score = best_score[index0] + 100;
+
+                        if best_score[index1].change_max(new_score) {
+                            best_keys[index1] = best_keys[index0];
+                        }
+                    }
+                }
+            }
+        }
+
+        for l in 0..len[3] - 1 {
+            for i in 0..len[0] {
+                for j in 0..len[1] {
+                    for k in 0..len[2] {
+                        let index0 = Self::to_index(&[i, j, k, l], &len);
+                        let index1 = Self::to_index(&[i, j, k, l + 1], &len);
+                        let new_score = best_score[index0] + 100;
+
+                        if best_score[index1].change_max(new_score) {
+                            best_keys[index1] = best_keys[index0];
+                        }
+                    }
+                }
+            }
+        }
+
+        Self {
+            best_keys,
+            hashmap,
+            len,
+        }
+    }
+
+    fn to_index(key: &[u32; Input::COLOR_COUNT], len: &[u32; Input::COLOR_COUNT]) -> usize {
+        (((key[0] * len[1] + key[1]) * len[2] + key[2]) * len[3] + key[3]) as usize
+    }
+
+    fn get(&self, key: &[u32; Input::COLOR_COUNT]) -> Option<&Millefeuille> {
+        let mut index = key.clone();
+
+        for (i, j) in index.iter_mut().zip(self.len.iter()) {
+            i.change_min(*j);
+        }
+
+        let best_key = self.best_keys[MillefeuilleDict::to_index(&index, &self.len)];
+        self.hashmap.get(&best_key)
     }
 }
 
