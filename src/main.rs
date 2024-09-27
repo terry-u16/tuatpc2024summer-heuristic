@@ -652,7 +652,8 @@ impl MillefeuilleTemplate {
                 color_flag |= 1 << assign[target].unwrap();
             }
 
-            new_score += self.last_erase * self.last_erase * color_flag.count_ones();
+            let color_count = color_flag.count_ones();
+            new_score += self.last_erase * self.last_erase * color_count * color_count;
 
             if new_score > old_score {
                 let mut positions = [vec![], vec![], vec![], vec![]];
