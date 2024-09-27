@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display, iter::Map, ops::Index, u32};
 
 use ac_library::Dsu;
-use chain_templates::{CHAIN_6X6, CHAIN_7X6, CHAIN_7X7, CHAIN_8X7, CHAIN_8X8};
+use chain_templates::RENSA_TEMPLATES;
 use grid::{Coord, Map2d, ADJACENTS};
 use itertools::Itertools;
 use marker::Usize1;
@@ -385,16 +385,9 @@ struct MillefeuilleDict {
 
 impl MillefeuilleDict {
     fn gen_all(input: &Input) -> Self {
-        let templates = [
-            (CHAIN_6X6, 6, 6),
-            (CHAIN_7X6, 7, 6),
-            (CHAIN_7X7, 7, 7),
-            (CHAIN_8X7, 8, 7),
-            (CHAIN_8X8, 8, 8),
-        ];
         let mut candidates = HashMap::new();
 
-        for &(s, height, width) in templates.iter() {
+        for &(s, height, width) in RENSA_TEMPLATES.iter() {
             if input.height >= height && input.width >= width {
                 let templates = MillefeuilleTemplate::generate(s, input);
 
@@ -865,7 +858,34 @@ impl MillefeuilleBoard {
 }
 
 mod chain_templates {
-    pub const CHAIN_6X6: &str = "
+    pub const RENSA_TEMPLATES: [(&str, usize, usize); 10] = [
+        (CHAIN_6X5, 6, 5),
+        (CHAIN_6X5_ALT, 6, 5),
+        (CHAIN_6X6, 6, 6),
+        (CHAIN_6X6_ALT, 6, 6),
+        (CHAIN_7X6, 7, 6),
+        (CHAIN_7X7, 7, 7),
+        (CHAIN_8X6, 8, 6),
+        (CHAIN_8X7, 8, 7),
+        (CHAIN_8X7_ALT, 8, 7),
+        (CHAIN_8X8, 8, 8),
+    ];
+
+    const CHAIN_6X5: &str = "
+    GHHIHG
+    GFFII
+    FABCDE
+    ABCDE
+    ABCDE";
+
+    const CHAIN_6X5_ALT: &str = "
+    FGGHGF
+    FEEHIH
+    EABCID
+    ABCDI
+    ABCD";
+
+    const CHAIN_6X6: &str = "
     HIIJIH
     HGGJKJ
     GFFKK
@@ -873,7 +893,15 @@ mod chain_templates {
     ABCDE
     ABCDE";
 
-    pub const CHAIN_7X6: &str = "
+    const CHAIN_6X6_ALT: &str = "
+    HIIJIH
+    HGGJKJ
+    GFFKKA
+    FABCDE
+    ABCDE
+    ABCDE";
+
+    const CHAIN_7X6: &str = "
     IJJKJI
     IHHKLK
     HGGLL
@@ -881,7 +909,7 @@ mod chain_templates {
     ABCDEF
     ABCDEF";
 
-    pub const CHAIN_7X7: &str = "
+    const CHAIN_7X7: &str = "
     IJJKJI
     IHHLKK
     HGLMMML
@@ -890,7 +918,7 @@ mod chain_templates {
     ABCDEF
     ABCDEF";
 
-    pub const CHAIN_8X7: &str = "
+    const CHAIN_8X7: &str = "
     JKKLKJ
     JIIMLL
     IHMNNNM
@@ -899,7 +927,24 @@ mod chain_templates {
     ABCDEFG
     ABCDEFG";
 
-    pub const CHAIN_8X8: &str = "
+    const CHAIN_8X6: &str = "
+    IJJIMMML
+    IHKKLLKJ
+    HABCDEFG
+    HABCDEFG
+    ABCDEFG
+    ABCDEFG";
+
+    const CHAIN_8X7_ALT: &str = "
+    JKKLKJI
+    JILMLOO
+    IHMNNONM
+    HABCDEFG
+    HABCDEFG
+    ABCDEFG
+    ABCDEFG";
+
+    const CHAIN_8X8: &str = "
     KKLMLKJ
     JILNMM
     JINON
