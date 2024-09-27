@@ -848,10 +848,11 @@ impl MillefeuilleBoard {
 }
 
 mod chain_templates {
-    pub const RENSA_TEMPLATES: [(&str, usize, usize); 16] = [
+    pub const RENSA_TEMPLATES: [(&str, usize, usize); 17] = [
         (CHAIN_5X5, 5, 5),
         (CHAIN_6X5, 5, 6),
         (CHAIN_6X5_ALT, 5, 6),
+        (CHAIN_6X5_ALT2, 5, 6),
         (CHAIN_6X6, 6, 6),
         (CHAIN_6X6_ALT, 6, 6),
         (CHAIN_7X5, 5, 7),
@@ -888,6 +889,13 @@ mod chain_templates {
     EABCID
     ABCDJI
     ABCDJJ";
+
+    const CHAIN_6X5_ALT2: &str = "
+    GHHIHG
+    GFFIIA
+    FABCDE
+    ABCDE
+    ABCDE";
 
     const CHAIN_6X6: &str = "
     HIIJIH
