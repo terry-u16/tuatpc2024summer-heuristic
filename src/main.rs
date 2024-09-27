@@ -773,7 +773,12 @@ impl MillefeuilleTemplate {
             chain += 1;
             board.fall();
             let erased = board.erase();
-            base_score += erased * erased * input.chain_coefs[chain as usize];
+
+            if board.board.iter().flatten().count() > 0 {
+                base_score += erased * erased * (input.chain_coefs[chain as usize] + 1);
+            } else {
+                base_score += erased * erased * input.chain_coefs[chain as usize];
+            }
 
             if erased == 0 {
                 break;
